@@ -105,6 +105,9 @@ def auc(y_true, y_pred):
     K.get_session().run(tf.local_variables_initializer())
     return auc
 
+def labels(y_true, y_pred, i):
+    return y_true[i]
+
 def recall(y_true, y_pred):
     # Calculates the recall
     true_positives = K.sum(K.round(K.clip(y_true * y_pred, 0, 1)))

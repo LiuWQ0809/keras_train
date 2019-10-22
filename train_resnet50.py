@@ -41,6 +41,7 @@ config.gpu_options.allow_growth=True
 session = tf.Session(config=config)
 KTF.set_session(session)
 
+import time
 import pdb
 
 np.random.seed(2019)
@@ -62,7 +63,8 @@ os.environ["LANG"] = "C.UTF-8"
 os.environ["HDF5_USE_FILE_LOCKING"] = "FALSE"
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # ignore warning 
 
-model_path = "/mnt/disk_share/liu_data/lymph_train/models/IF_resnet50_20190930_4class_4s/IF_resnet50_20190930_4class_4s_model_and_weights_epoch_12.hdf5"
+model_path = "/home/liu/work/models/postoperative_resnet50_0923_model_and_weights_epoch_21.hdf5"
+# model_path = "/mnt/disk_share/liu_data/lymph_train/models/IF_resnet50_20190930_4class_4s/IF_resnet50_20190930_4class_4s_model_and_weights_epoch_12.hdf5"
 # model_path = "/mnt/disk_share/liu_data/lymph_train/models/20190920_4class_4s/IF_resnet50_0920_weights_only_epoch_8.h5"
 # model_path = "/home/liu/update/old_Camylon/models/20190713_0805_3class_all/IF_resnet50_0805_model_and_weights_epoch_12.hdf5"
 # model_path = "/mnt/disk_share/liu_data/lymph_train/models/20190713_0805_3class_all/IF_resnet50_0805_weights_only_epoch_12.h5"
@@ -73,9 +75,9 @@ model_path = "/mnt/disk_share/liu_data/lymph_train/models/IF_resnet50_20190930_4
             #Define the parameters#
 ###########################################################
 # os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-# os.environ["CUDA_VISIBLE_DEVICES"] = "3"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
 img_width, img_height = 224, 224
-batch_size = 96
+batch_size = 8
 epochs = 30
 classes = 2
 activation = 'binary'
@@ -91,9 +93,9 @@ pooling = 'max'
 class_weight = False
 FL = False
 phase = "train"
-log_dir = "/mnt/disk_share/liu_data/lymph_train/models/IF_resnet50_20191009_8class_4s/logs/"
-model_dir = "/mnt/disk_share/liu_data/lymph_train/models/IF_resnet50_20191009_8class_4s/"
-model_name = "IF_resnet50_20191009_8class_4s"
+log_dir = "./debug/logs/"
+model_dir = "./debug/models/"
+model_name = "debug_keras_1017"
 float_16 = False
 
 if not model_dir:
@@ -134,13 +136,13 @@ sample_save_path_valid = "/1TB/jin_data/samples/0116"
 
 # Original nb_sample and paths for training
 # training_json_path_for_training = "/mnt/disk_share/liu_data/lymph_train/json/debug/"
-training_json_path_for_training = "/mnt/disk_share/liu_data/lymph_train/json/json_hard_example_0930/"# "/mnt/disk_share/liu_data/lymph_train/json/json_hard_example_0925/"# "/mnt/disk_share/liu_data/lymph_train/json/json_hard_example_0827/"# "/mnt/disk_share/liu_data/lymph_train/json/json_only_clean_0715/"# "/mnt/disk_share/liu_data/lymph_train/json/json_hard_example_0731/"# "/mnt/disk_share/liu_data/lymph_train/json/json_select_100_clean_0604/"
+training_json_path_for_training = "/14TB/liu_data/debug/"# "/mnt/disk_share/liu_data/lymph_train/json/json_hard_example_0925/"# "/mnt/disk_share/liu_data/lymph_train/json/json_hard_example_0827/"# "/mnt/disk_share/liu_data/lymph_train/json/json_only_clean_0715/"# "/mnt/disk_share/liu_data/lymph_train/json/json_hard_example_0731/"# "/mnt/disk_share/liu_data/lymph_train/json/json_select_100_clean_0604/"
 # validation_set_dir_for_training = "/mnt/disk_share/liu_data/lymph_train/json/valset_fix_size_debug/"
 validation_set_dir_for_training = "/mnt/disk_share/liu_data/lymph_train/json/valset_fix_size/"
 # validation_set_dir_for_training = "/mnt/disk_share/data/breast_cancer/lymph_node/intraoperative_frozen/debug/224_debug/"
-nb_training_samples_train_init = 100000
+nb_training_samples_train_init = 1000
 # nb_random_validation_samples_train_init = 13388
-nb_fix_validation_samples_train_init = 180000
+nb_fix_validation_samples_train_init = 1800
 
 # Original nb_sample and paths for debugging
 # training_json_path_for_debugging = "/30TB/jin_data/cam16_processed/0114_debug/json"
@@ -222,9 +224,9 @@ predictions = Dense(1, activation='sigmoid')(base_model_out)
 model = Model(inputs=base_model.input, outputs=predictions)
 model.load_weights(model_path, by_name=True)
 parallel_model = model
-# ###########################################################
-#                         #Build model#
-# ###########################################################
+###########################################################
+                        #Build model#
+###########################################################
 # # Choose logistic layer according to the loss function.
 # if activation == 'binary': # Default binary
 #     predictions = Dense(1, activation='sigmoid')(base_model_out)
@@ -276,9 +278,9 @@ parallel_model = model
 
 # model = load_model(model_path)
 # pdb.set_trace()
-for layer in model.layers[:-34]: # -3: just update fc layer     -34: update stage5 and fc layer  -96: update stage4  stage5 and fc layer
-    # print(layer.trainable)
-    layer.trainable = False
+# for layer in model.layers[:-34]: # -3: just update fc layer     -34: update stage5 and fc layer  -96: update stage4  stage5 and fc layer
+#     # print(layer.trainable)
+#     layer.trainable = False
 # import pdb
 # pdb.set_trace()
 # parallel_model = parallel_model.load_weights(model_path)
@@ -359,33 +361,71 @@ callbacks_list = [loss_history, lrate, cbk, tb_callback]
 from PIL import ImageFile
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
-if class_weight:
-    # Set your class weight here!
-    class_weight = {0:1., 1:65.40}
+# if class_weight:
+#     # Set your class weight here!
+#     class_weight = {0:1., 1:65.40}
 
-    print("=>Start training with class weights ...")
-    print("Choice of loss:" + loss_fun)
-    parallel_model.fit_generator(generator=training_generator,
-                        steps_per_epoch=nb_training_sample//(batch_size*nb_gpu),
-                        validation_data=validation_generator,
-                        epochs=epochs,
-                        use_multiprocessing=False,
-                        workers=1,
-                        validation_steps=nb_validation_sample//(batch_size*nb_gpu),
-                        verbose=1,
-                        class_weight=class_weight,
-                        callbacks=callbacks_list)
-else:
-    print("=>Start training without class weight...")
-    print("Choice of activation:" + activation)
-    parallel_model.fit_generator(generator=training_generator,
-                    steps_per_epoch=nb_training_sample//(batch_size),#*nb_gpu),
-                    # validation_data=validation_generator,
-                    epochs=epochs,
-                    use_multiprocessing=False,
-                    workers=1,
-                    # validation_steps=nb_validation_sample//(batch_size),#*nb_gpu),
-                    verbose=1,
-                    callbacks=callbacks_list)
+#     print("=>Start training with class weights ...")
+#     print("Choice of loss:" + loss_fun)
+#     parallel_model.fit_generator(generator=training_generator,
+#                         steps_per_epoch=nb_training_sample//(batch_size*nb_gpu),
+#                         validation_data=validation_generator,
+#                         epochs=epochs,
+#                         use_multiprocessing=False,
+#                         workers=1,
+#                         validation_steps=nb_validation_sample//(batch_size*nb_gpu),
+#                         verbose=1,
+#                         class_weight=class_weight,
+#                         callbacks=callbacks_list)
+# else:
+#     print("=>Start training without class weight...")
+#     print("Choice of activation:" + activation)
+#     parallel_model.fit_generator(generator=training_generator,
+#                     steps_per_epoch=nb_training_sample//(batch_size),#*nb_gpu),
+#                     # validation_data=validation_generator,
+#                     epochs=epochs,
+#                     use_multiprocessing=False,
+#                     workers=1,
+#                     # validation_steps=nb_validation_sample//(batch_size),#*nb_gpu),
+#                     verbose=1,
+#                     callbacks=callbacks_list)
 
-print("=> Whole training process finished.")
+# print("=> Whole training process finished.")
+
+
+# def write_log(callback, names, logs, batch_no):
+#     for name, value in zip(names, logs):
+#         summary = tf.Summary()
+#         summary_value = summary.value.add()
+#         summary_value.simple_value = value
+#         summary_value.tag = name
+#         callback.writer.add_summary(summary, batch_no)
+#         callback.writer.flush()
+    
+# net_in = Input(shape=(3,))
+# net_out = Dense(1)(net_in)
+# model = Model(net_in, net_out)
+# model.compile(loss='mse', optimizer='sgd', metrics=['mae'])
+ 
+# log_path = './graph'
+# callback = TensorBoard(log_path)
+# callback.set_model(model)
+# train_names = ['train_loss', 'train_mae']
+# val_names = ['val_loss', 'val_mae']
+start_time = time.time()
+X_train, Y_train = next(training_generator)
+for batch_no in range(100):
+    # pdb.set_trace()
+    logs = parallel_model.train_on_batch(X_train, Y_train)
+    # pred_label = parallel_model.predict(X_train)
+    # pred_label[pred_label > 0.5] = 1
+    # pre_labels = np.int8(pred_label)
+    # logs = parallel_model.fit(x_train, y_train, batch_size=32, epochs=10)
+    # write_log(callback, train_names, logs, batch_no)
+    
+    # if batch_no % 10 == 0:
+    #     X_val, Y_val = np.random.rand(32, 3), np.random.rand(32, 1)
+    #     logs = model.train_on_batch(X_val, Y_val)
+End_time = time.time() - start_time
+print("INFO train times = {}".format(End_time))
+

@@ -1880,10 +1880,13 @@ class JsonIterator(Iterator,RandomCrop):
         logger.info(len(enum))
 
         # set parameters
-        labels = ['normal_hard_black', 'normal_hard_dim', 'normal_hard3', 'normal_hard2', 'normal_hard', 'normal', 'tumor_hard', 'tumor']
+        # labels = ['normal_hard_black', 'normal_hard_dim', 'normal_hard3', 'normal_hard2', 'normal_hard', 'normal', 'tumor_hard', 'tumor']
+        labels = ['normal', 'tumor']
         json_file_path=self.json_file_path
-        nb_per_class = [1, 1, 6, 10, 15, 15, 16, 32]
-        foreground_rate_per_class = [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.7, 0.7]
+        # nb_per_class = [1, 1, 6, 10, 15, 15, 16, 32]
+        # foreground_rate_per_class = [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.7, 0.7]
+        nb_per_class = [16, 16]
+        foreground_rate_per_class = [0.1, 0.7]
         # pdb.set_trace()
         objs, nb_samples_per_epoch = Iterator.get_instance_objects(train_base_path=json_file_path,
                                                         eval_base_path=json_file_path,
@@ -1896,8 +1899,8 @@ class JsonIterator(Iterator,RandomCrop):
                                                         crop_height=224,
                                                         readers=1,
                                                         num_threads=32,
-                                                        info_maxsize=3000,
-                                                        data_maxsize=3000)
+                                                        info_maxsize=10,
+                                                        data_maxsize=10)
         logger.info('*********nb_samples_per_epoch: {}**********' .format(nb_samples_per_epoch))
         print('*********nb_samples_per_epoch: {}**********' .format(nb_samples_per_epoch))
         self.batch_generator = Iterator.image_data_generator(objs, sum(nb_per_class))
