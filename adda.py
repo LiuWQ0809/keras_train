@@ -26,6 +26,7 @@ import argparse
 
 import tools.mutil_processing_image_generator_balance as MB
 import resnet_factory
+from GRL import GradientReversal
 
 import pdb
 
@@ -37,6 +38,7 @@ class ADDA():
         self.img_shape = args.processed_size
         self.src_flag = False
         self.disc_flag = False
+        self.grl_layer = GradientReversal(1.0)
         
         self.discriminator_decay_rate = 3 #iterations
         self.discriminator_decay_factor = 0.5
@@ -46,9 +48,9 @@ class ADDA():
     def define_source_encoder(self, weights=None):
     
         #self.source_encoder = keras.applications.vgg16.VGG16(include_top=False, weights='imagenet', input_shape=self.img_shape, pooling=None, classes=10)
-        inp = Input(shape=self.img_shape)
+        # inp = Input(shape=self.img_shape)
 
-        base_model = resnet_factory.ResNet50(include_top=False, weights=None)
+        base_model = resnet_factory.ResNet50(include_top=False, weights=None, input_shape=self.img_shape)
         base_model_out = base_model.output
         # x = MaxPooling2D(pool_size=(2, 2))(base_model_out)
         # pdb.set_trace()
@@ -78,31 +80,27 @@ class ADDA():
         x = Dense(1, activation='sigmoid')(base_model_out)
         
         source_classifier_model = Model(inputs=(model.input), outputs=(x))
-        
+        # pdb.set_trace()
         if weights is not None:
             source_classifier_model.load_weights(weights)
         
         return source_classifier_model
     
     def define_discriminator(self, model):
-        # pdb.set_trace()
-        # inp = model.output
-        # input_shape = _obtain_input_shape(model.output_shape[1:],
-        #                               default_size=224,
-        #                               min_size=32,
-        #                               data_format=K.image_data_format(),
-        #                               require_flatten=include_top)
-        input_shape = [8,8,2048]# model.output_shape[1:]
+        input_shape = model.output_shape[1:]
+        inp = Input(input_shape)
         pdb.set_trace()
-        inp = Input(input_shape)#, shape=input_shape)
-        x = Flatten(input_shape=input_shape)(inp)
-        x = Dense(128, activation=LeakyReLU(alpha=0.3), kernel_regularizer=regularizers.l2(0.01), name='discriminator1')(inp)
+        x = Flatten()(inp)
+        # x = tf.negative(x)
         
-        x = Dense(2, activation='sigmoid', name='discriminator2')(x)
+        feature_output_grl = self.grl_layer(x)
+        x = Dense(128, activation=LeakyReLU(alpha=0.3), kernel_regularizer=regularizers.l2(0.01), name='discriminator1')(feature_output_grl)
+        
+        predictions = Dense(2, activation='sigmoid', name='discriminator2')(x)
         
         self.disc_flag = True
         # pdb.set_trace()
-        self.discriminator_model = Model(inputs=(inp), outputs=(x), name='discriminator')
+        self.discriminator_model = Model(inputs=(inp), outputs=(predictions), name='discriminator')
     
     def tensorboard_log(self, callback, names, logs, batch_no):
         
@@ -118,7 +116,7 @@ class ADDA():
         
         if not self.disc_flag:
             self.define_discriminator(model)
-        
+        pdb.set_trace()
         disc = Model(inputs=(model.input), outputs=(self.discriminator_model(model.output)))
         
         if weights is not None:
@@ -196,9 +194,9 @@ class ADDA():
         target_discriminator = self.get_discriminator(self.target_encoder, tgt_discriminator)
         
         if src_discriminator is not None:
-            source_discriminator.load_weights(src_discriminator)
+            source_discriminator.load_weights(src_discriminator, by_name=True)
         if tgt_discriminator is not None:
-            target_discriminator.load_weights(tgt_discriminator)
+            target_discriminator.load_weights(tgt_discriminator, by_name=True)
         
         source_discriminator.compile(loss = "binary_crossentropy", optimizer=self.tgt_optimizer, metrics=['accuracy'])
         target_discriminator.compile(loss = "binary_crossentropy", optimizer=self.tgt_optimizer, metrics=['accuracy'])
@@ -209,22 +207,23 @@ class ADDA():
         callback2.set_model(target_discriminator)
         src_names = ['src_discriminator_loss', 'src_discriminator_acc']
         tgt_names = ['tgt_discriminator_loss', 'tgt_discriminator_acc']
+
+        source, source_label = source_generator.next()
+        target, target_label = target_generator.next()
         
         for iteration in range(start_epoch, epochs):
             
             avg_loss, avg_acc, index = [0, 0], [0, 0], 0
-            source, source_label = source_generator.next()
-            target, target_label = target_generator.next()
             for step in range(0, 100):
-                pdb.set_trace()
-                l1, acc1 = source_discriminator.train_on_batch(source, np_utils.to_categorical(np.zeros(source.shape[0]), 1))
-                l2, acc2 = target_discriminator.train_on_batch(target, np_utils.to_categorical(np.ones(target.shape[0]), 1))
+                # pdb.set_trace()
+                loss1, acc1 = source_discriminator.train_on_batch(source, np_utils.to_categorical(np.zeros(source.shape[0]), 2))
+                loss2, acc2 = target_discriminator.train_on_batch(target, np_utils.to_categorical(np.ones(target.shape[0]), 2))
                 index+=1
-                loss, acc = (l1+l2)/2, (acc1+acc2)/2
-                print (iteration+1,': ', index,'/', num_batches, '; Loss: %.4f'%loss, ' (', '%.4f'%l1, '%.4f'%l2, '); Accuracy: ', acc, ' (', '%.4f'%acc1, '%.4f'%acc2, ')')
-                avg_loss[0] += l1
+                loss, acc = (loss1+loss2)/2, (acc1+acc2)/2
+                print (iteration+1,': ', index,'/', num_batches, '; Loss: %.4f'%loss, ' (', '%.4f'%loss1, '%.4f'%loss2, '); Accuracy: ', acc, ' (', '%.4f'%acc1, '%.4f'%acc2, ')')
+                avg_loss[0] += loss1
                 avg_acc[0] += acc1
-                avg_loss[1] += l2
+                avg_loss[1] += loss2
                 avg_acc[1] += acc2
                 if index%num_batches == 0:
                     break
@@ -237,11 +236,11 @@ class ADDA():
                 print ('Learning Rate Decayed to: ', K.get_value(target_discriminator.optimizer.lr))
             
             if iteration%save_interval==0:
-                source_discriminator.save_weights('data/discriminator_mnist_%02d.hdf5'%iteration)
-                target_discriminator.save_weights('data/discriminator_svhn_%02d.hdf5'%iteration)
+                source_discriminator.save_weights('data/discriminator_source_%02d.hdf5'%iteration)
+                target_discriminator.save_weights('data/discriminator_target_%02d.hdf5'%iteration)
                 
-            self.tensorboard_log(callback1, src_names, [avg_loss[0]/mnist.shape[0], avg_acc[0]/mnist.shape[0]], iteration)
-            self.tensorboard_log(callback2, tgt_names, [avg_loss[1]/mnist.shape[0], avg_acc[1]/mnist.shape[0]], iteration)
+            self.tensorboard_log(callback1, src_names, [avg_loss[0]/3200, avg_acc[0]/3200], iteration)
+            self.tensorboard_log(callback2, tgt_names, [avg_loss[1]/3200, avg_acc[1]/3200], iteration)
     
     def eval_source_classifier(self, model, dataset='Source', batch_size=128, domain='Source'):
         
@@ -297,13 +296,13 @@ if __name__ == '__main__':
     args = args_define()
     
     os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu_select  # "7" # Please don't add spaces.
-    args.source_discriminator_weights = "/mnt/disk_share/liu_data/lymph_train/models/IF_resnet50_20190930_4class_4s/IF_resnet50_20190930_4class_4s_model_and_weights_epoch_12.hdf5"
-    args.target_discriminator_weights = "/mnt/disk_share/liu_data/lymph_train/models/IF_resnet50_20190930_4class_4s/IF_resnet50_20190930_4class_4s_model_and_weights_epoch_12.hdf5"
+    args.source_discriminator_weights = "/home/liu/work/models/postoperative_resnet50_0923_model_and_weights_epoch_21.hdf5"
+    args.target_discriminator_weights = "/home/liu/work/models/postoperative_resnet50_0923_model_and_weights_epoch_21.hdf5"
     # Dataset path
-    # args.tgt_trainset = ""
-    # args.tgt_valset = ""
-    # args.src_trainset = ""
-    # args.src_valset = ""
+    args.tgt_trainset = "/14TB/liu_data/debug/"
+    args.tgt_valset = "/14TB/liu_data/debug/"
+    args.src_trainset = "/14TB/liu_data/debug/"
+    args.src_valset = "/14TB/liu_data/debug/"
     args.train_discriminator = True
 
     args.num_gpus = int((len(os.environ["CUDA_VISIBLE_DEVICES"]) + 1) // 2)
