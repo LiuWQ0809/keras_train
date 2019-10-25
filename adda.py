@@ -89,7 +89,7 @@ class ADDA():
     def define_discriminator(self, model):
         input_shape = model.output_shape[1:]
         inp = Input(input_shape)
-        pdb.set_trace()
+        # pdb.set_trace()
         x = Flatten()(inp)
         # x = tf.negative(x)
         
@@ -116,7 +116,7 @@ class ADDA():
         
         if not self.disc_flag:
             self.define_discriminator(model)
-        pdb.set_trace()
+        # pdb.set_trace()
         disc = Model(inputs=(model.input), outputs=(self.discriminator_model(model.output)))
         
         if weights is not None:
@@ -190,7 +190,6 @@ class ADDA():
             layer.trainable = False
         
         source_discriminator = self.get_discriminator(self.source_encoder, src_discriminator)
-        # pdb.set_trace()
         target_discriminator = self.get_discriminator(self.target_encoder, tgt_discriminator)
         
         if src_discriminator is not None:
@@ -217,7 +216,9 @@ class ADDA():
             for step in range(0, 100):
                 # pdb.set_trace()
                 loss1, acc1 = source_discriminator.train_on_batch(source, np_utils.to_categorical(np.zeros(source.shape[0]), 2))
+                pdb.set_trace()
                 loss2, acc2 = target_discriminator.train_on_batch(target, np_utils.to_categorical(np.ones(target.shape[0]), 2))
+                pdb.set_trace()
                 index+=1
                 loss, acc = (loss1+loss2)/2, (acc1+acc2)/2
                 print (iteration+1,': ', index,'/', num_batches, '; Loss: %.4f'%loss, ' (', '%.4f'%loss1, '%.4f'%loss2, '); Accuracy: ', acc, ' (', '%.4f'%acc1, '%.4f'%acc2, ')')
